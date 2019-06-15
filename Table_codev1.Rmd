@@ -1,0 +1,666 @@
+---
+title: "Making pretty tables 1"
+author: "Natasha Aduloju-Ajijola"
+date: "6/14/2019"
+output:
+  html_document: default
+  pdf_document: default
+header-includes:
+- \usepackage{placeins}
+- \usepackage{longtable}
+---
+
+```{r setup, include = FALSE}
+knitr::opts_chunk$set(echo=FALSE, include=TRUE, fig.align="center")
+library("papaja")
+library("haven")
+library("nnet")
+library("labelled")
+library("xtable")
+library("huxtable")
+library("flextable")
+library("officer")
+
+options(xtable.floating = FALSE)
+#r_refs(file = "DecisionRef.bib")
+#my_citation <- cite_r(file = "DecisionRef.bib")
+
+data2 <- readRDS("fake.rds")
+#data2 <- read_sav("None_ya.sav")
+#data3 <- read_sav("None_ya_biz.sav")
+
+data2$RBBoverall <- as.numeric(data2$RBB_thtGod + data2$RBB_meditated + data2$RBB_prayed + data2$RBB_read + data2$RBB_thtGod + data2$RBB_worship)
+RBBCro <- dplyr::select(data2, "RBB_thtGod", "RBB_meditated", "RBB_prayed", "RBB_read", "RBB_thtGod", "RBB_worship")
+RBBalpha <- psych::alpha(RBBCro)
+
+
+data2$risk <- as.numeric(data2$Street_drugs + data2$Etoh_tx + data2$Homeless + data2$Correctional_sx + data2$Abuse + data2$Dx_HPV + data2$Sex_prison + data2$Sex_MSM + data2$Sex_highdrgs + data2$Sex_injectsdrgs + data2$Dx_chalmydia + data2$Dx_gonorrhea)
+riskCro <- dplyr::select(data2, "Street_drugs", "Etoh_tx", "Homeless", "Correctional_sx", "Abuse", "Dx_HPV", "Sex_prison", "Sex_MSM", "Sex_highdrgs", "Sex_injectsdrgs", "Dx_chalmydia", "Dx_gonorrhea")
+riskalpha <- psych::alpha(riskCro)
+
+thinks <- as.numeric(data2$Doctor_thinks + data2$Pastor_thinks + data2$Friends_think + data2$Chruch_thinks + data2$Partner_thinks)
+thinksCro <- dplyr::select(data2, "Doctor_thinks", "Pastor_thinks", "Friends_think", "Chruch_thinks", "Partner_thinks")
+thinksalpha <- psych::alpha(thinksCro)
+#data$thinks <- thinks
+data2$thinks <- thinks
+
+# data2$decision <- as.numeric(data2$Planned_did + data2$Intellect_emotion + data2$Weighed_decided + data2$Thought_hit) removed intellect_emotion because with it in there the alpha was 0
+data2$decision <- as.numeric(data2$Planned_did + data2$Weighed_decided + data2$Thought_hit)
+decisionCro <- dplyr::select(data2, "Planned_did", "Intellect_emotion", "Weighed_decided", "Thought_hit")
+decisionalpha <- psych::alpha(decisionCro)
+
+support <- as.numeric(data2$Doctor_support + data2$Pastor_support + data2$Friends_support + data2$Church_support + data2$Partner_support)
+supportCro <- dplyr::select(data2, "Doctor_support", "Pastor_support", "Friends_support", "Church_support", "Partner_support")
+supportalpha <- psych::alpha(supportCro)
+#data$support <- support
+data2$support <- support
+
+testingbeliefs <- as.numeric(data2$Comfortable + data2$Peace_past + data2$Joyful_negative + data2$Know_confidential + data2$Medication_positive + data2$Protect_future)
+testingCro <- dplyr::select(data2, "Comfortable", "Peace_past", "Joyful_negative", "Know_confidential", "Medication_positive", "Protect_future")
+testingalpha <- psych::alpha(testingCro)
+data2$testingbeliefs <- testingbeliefs
+#data$testingbeliefs <- testingbeliefs
+
+Sex <- plyr::count(data2$Sex)
+Sex2 <- round(Sex[,2]/sum(Sex[,2])*100, 2)
+Sex3 <- paste0(Sex[,2], " (", Sex2, "%)")
+
+data2$Stigma_sumscore <- data2$Share_pew + data2$Doctors_truth + data2$Fear_HIVpositive + data2$Concern_disrimination
+StigmaCro <- dplyr::select(data2, "Share_pew", "HIV_responsible", "Doctors_truth", "Fear_HIVpositive", "Concern_disrimination")
+stigmalpha <- psych::alpha(StigmaCro, keys = c(-1, 1, -1, -1, -1))
+
+data2$HIVknowledge <- data2$Cup_plate + data2$Pregnant_HIV + data2$Sex_IDU +
+data2$Condoms_prev + data2$Share + data2$HIV_present + data2$Condom_unrolled + data2$Tattoo + data2$Not_look_sick + data2$HIV_blood
+KnowCro <- dplyr::select(data2, "Cup_plate", "Pregnant_HIV", "Sex_IDU", "Condoms_prev", "Share", "HIV_present", "Condom_unrolled", "Tattoo", "Not_look_sick", "HIV_blood")
+Knowalpha <- psych::alpha(KnowCro)
+
+hltscreenings <- data2$Blood_pressure_6 + data2$Colon_cancer_6 + data2$Cholesterol_6 + data2$Blood_glucose_6 + data2$Mammogram_6 + data2$Pap_6
+# removed Prostate_6 because it made the standard deviation 0
+hltscreeningCro <- dplyr::select(data2, "Blood_pressure_6", "Colon_cancer_6", "Cholesterol_6", "Blood_glucose_6", "Mammogram_6", "Pap_6")
+hltscreeningalpha <- psych::alpha(hltscreeningCro)
+
+```
+
+```{r functions, echo=FALSE}
+
+create.SD <- function(input1, lable) {
+  lable <- summary(input1, na.rm = TRUE)
+  lable1 <- round(as.numeric(lable[4]), 1)
+  lable2 <- round(sd(as.numeric(input1), na.rm = TRUE), 1)
+  lable3 <- paste0(lable1, " ", "(", lable2, ")")
+  return(lable3)
+}
+create.freq <- function(input1, lable) {
+  lable <- plyr::count(na.omit(input1))
+  lable2 <- round(lable[,2]/sum(lable[,2])*100, 1)
+  lable3 <- paste0(lable[,2], " (", lable2, "%)")
+  return(cbind(as.character(lable[,1]), lable3))
+}
+mod.freq <- function(input1) {
+  tempDF <- data.frame(table(input1))
+  lable2 <- round(tempDF[,2]/sum(tempDF[,2])*100, 1)
+  lable3 <- paste0(tempDF[,2], " (", lable2, "%)")
+  return(cbind(as.character(tempDF[,1]), lable3))
+}
+
+table.prep <- function (input1, input2, input3){
+  input2.x <- data.frame(mod.freq(input1, input2))
+  names(input2.x) <- c("codes", "lable3")
+  input3.x <- as.character(input3[2])
+  input2 <- cbind(input3.x, spread(input2.x, codes, lable3))
+  return(input2)
+}
+mean.for.sum<- function(input1) {
+  lable <- summary(as.numeric(input1, na.rm = TRUE))
+  lable1 <- round(as.numeric(lable[4]), 1)
+}
+p.round <- function(x){
+  if(x < .001) return(paste('<', '.001'))
+  paste('=', myround(x,3))
+}
+myttest <-function(x, y){
+  round(t.test(x~y, conf.level = 0.95)$p.value, 3)
+}
+mychi <- function(x, y) {
+  round(suppressWarnings(chisq.test(x, y)$p.value), 3)
+}
+make.rm<-function(constant,repeated,data,contrasts) {
+ if(!missing(constant) && is.vector(constant)) {
+  if(!missing(repeated) && is.vector(repeated)) {
+   if(!missing(data)) {
+    dd<-dim(data)
+    replen<-length(repeated)
+    if(missing(contrasts))
+     contrasts<-
+      ordered(sapply(paste("T",1:length(repeated),sep=""),rep,dd[1]))
+    else
+     contrasts<-matrix(sapply(contrasts,rep,dd[1]),ncol=dim(contrasts)[2])
+    if(length(constant) == 1) cons.col<-rep(data[,constant],replen)
+    else cons.col<-lapply(data[,constant],rep,replen)
+    new.df<-data.frame(cons.col,
+     repdat=as.vector(data.matrix(data[,repeated])),
+     contrasts)
+    return(new.df)
+   }
+  }
+ }
+ cat("Usage: make.rm(constant, repeated, data [, contrasts])\n")
+ cat("\tWhere 'constant' is a vector of indices of non-repeated data and\n")
+ cat("\t'repeated' is a vector of indices of the repeated measures data.\n")
+}
+param_est <- function(char_vector){
+  
+  start = grep("Parameter Estimates",char_vector) + 2
+  end = which("" == char_vector)
+  for (x in end){
+    if (x > start){
+      end <- x - 2
+      break
+    }
+  }
+  
+  info <- char_vector[start:end]
+  info <- info[-2]
+  info <- gsub("^\\s+|\\s+$", "", info)
+  info <- gsub("\\s{2,9}", "\t", info)
+  
+  DF <- data.frame(do.call(rbind, strsplit(info, "\t", fixed=FALSE)), stringsAsFactors=FALSE)
+  colnames(DF) <- as.character(DF[1,])
+  DF <- DF[-1:-2,]
+  DF <- data.frame(DF[,1], sapply(DF[,2:8], as.numeric))
+  
+  return (DF)
+}
+```
+```{r functions 2, echo= FALSE}
+
+getData<-function(rows,refDF,present){
+  
+  ##Error checking to ensure that present is only 0 or 1
+  ## any rows chosen, therefore, must be a binary variable
+  if (present!=1 && present !=0){
+    print("###Present much be either 0 or 1")
+    return
+  }
+  
+  ##Usage you must pass in a vector using the names of the columns of interest,
+  ## these will be reported out as the row names, as well as the data.frame of interest
+  # Example:  
+    # rows<-c("na_13_BloodPressure","na_13_Cholesterol","na_13_Glucose","na_13_STI_HIV","na_13_Asthma",
+    #              "na_13_HeartDisease_Stroke","na_13_Colon_Cancer","na_13_Prostate_Cancer", "na_13_Mammography",
+    #              "na_13_Pap","na_13_MntlHealthCond")
+  
+
+  cols<-c("Overall","Sex","Sex")
+  
+  ##Initialize the data.frame to receive data
+  newDF<-data.frame()
+  
+  ##For each heading listed in the rows vector...
+  for(i in rows){
+    ##For each number from 1 to the number of columns in cols
+    ## check each condition to sort the data
+    ## these conditions are specific and will need to be updated if the conditions change
+    ## for example: if the age range changes, 45 will need to be updated
+    for(j in 1:length(cols)){
+             
+      if (j==1){
+        output<-nrow(refDF[which(refDF[,i]==present),])
+      }
+      else if (j==2){
+        output<- c(output,nrow(refDF[which(refDF[,cols[j]]==1 & refDF[,i]==present),]))
+      }
+      else if (j==3){
+        output<- c(output,nrow(refDF[which(refDF[,cols[j]]==2 & refDF[,i]==present),]))
+      }
+      
+    }
+    ##One row has been completed, save the information to a data.frame
+    newDF<- rbind(newDF,output)
+  }
+  
+  ##Set the column and row names of the data.frame
+  colnames(newDF)<-cols
+  rownames(newDF)<-rows
+  
+  ##Return the data.frame from this function
+  newDF
+}
+GetNBdata <- function(list, rows, refDF){
+  
+  #Parameters:
+  ## list: a list of data.frame columns to be processed
+  ##    Example: list(data2$Sexual_ID,data2$Monthly_Income)
+  ## rows: a vector of column names to assist in processing,
+  ##    it must match which, and the order of, columns used to make the list
+  ##    Example: if list is as described above, then rows must be
+  ##        c("Sexual_ID","Monthly_Income")
+  ## refDF: the data.frame used to get the data
+  ##    Example: if the list is made using data2$Sexual_ID, then the refDF will be data2
+  
+  ## This function is expecting these columns to be of class labelled,
+  ##    so the labelled library needs to be imported
+  #library(labelled)
+  
+  ## Set the columns of refDF that are of interest
+  cols<-c("Overall","Sex","Sex")
+  
+  ##Initialize the data.frame and rNames to receive data
+  newDF<-data.frame()
+  rNames<-c()
+  
+  ## Iterate over the number of items contained in the list
+  for(i in 1:length(list)){
+    
+    # Each item in the list is of class labelled, so it needs to
+    #   be converted to a factor level variable.
+    #   Here, we store the number values to identify particular rows 
+    #   as well as the labels to label the rows later.
+    vals<-levels(to_factor(list[[i]], levels="values"))
+    names<-levels(to_factor(list[[i]], levels="labels"))
+    
+    # Iterate over the number of levels
+    for (k in 1:length(vals)){
+      #Find the information below in each of the columns and store it
+      #  to a temp variable to build the data.frame
+      for(j in 1:length(cols)){
+      
+        if (j==1){
+          output<-nrow(refDF[which(refDF[,rows[i]]==as.numeric(vals[k])),])
+        }
+        else if (j==2){
+          # Coding for Males
+          output<- c(output,nrow(refDF[which(refDF[,cols[j]]==1 & refDF[,rows[i]]==as.numeric(vals[k])),]))
+        }else if (j==3){
+          # Coding for Females
+          output<- c(output,nrow(refDF[which(refDF[,cols[j]]==2 & refDF[,rows[i]]==as.numeric(vals[k])),]))
+        }
+      
+      }
+      ##One row has been completed, save the information to a data.frame
+      newDF<- rbind(newDF,output)
+    }
+    #Build the rownames based on the factor labels for the current section
+    rNames<-c(rNames,names)
+    
+    
+  }
+  
+  ##Set the column and row names of the data.frame
+  colnames(newDF)<-cols
+  rownames(newDF)<-rNames
+  
+  ##Return the data.frame from this function
+  newDF
+}
+dataNBPercent<-function(inputDF, refDF){
+  
+  ##Requires data.frame obtained from getData(), and the original data.frame
+  ## passed to getData()
+  
+  ##inputDF format: Overall, Condition 1 (grouped over 2 cols),
+  ##  Condition 2 (grouped over 2 cols)...etc
+  
+  cols<-c("Overall","Sex","Sex")
+  
+  
+  ##Calculate the totals for each category from the original data
+  totalN<-nrow(refDF[,1])
+  totalMale<-nrow(refDF[which(refDF[,cols[2]]==1),])
+  totalFemale<-nrow(refDF[which(refDF[,cols[3]]==2),])
+  
+  ##Initialize the output data.frame
+  outputDF<-data.frame()
+  
+  ##Use string operations to glue the count data with the percentage and '%'
+  overall<-paste(inputDF[,1]," (",round(inputDF[,1]/totalN*100,1),"%)", sep="")
+  male<-paste(inputDF[,2]," (",round(inputDF[,2]/totalMale*100,1),"%)", sep="")
+  female<-paste(inputDF[,3]," (",round(inputDF[,3]/totalFemale*100,1),"%)", sep = "")
+  
+  #Build the data.frame from the individual columns created above
+  outputDF<-cbind(overall, male, female)
+  
+  #Name the rows in the data.frame
+  rownames(outputDF)<-rownames(inputDF)
+  
+  #Return the data.frame
+  outputDF
+}
+dataPercent<-function(inputDF, refDF){
+  
+  ##Requires data.frame obtained from getData(), and the original data.frame
+  ## passed to getData()
+  
+  ##inputDF format: Overall, Condition 1 (grouped over 2 cols),
+  ##  Condition 2 (grouped over 2 cols)...etc
+
+  cols<-c("Overall","Sex","Sex")
+  
+  
+  ##Calculate the totals for each category from the original data
+  totalN<-nrow(refDF[,1])
+  totalMale<-nrow(refDF[which(refDF[,cols[2]]==1),])
+  totalFemale<-nrow(refDF[which(refDF[,cols[3]]==2),])
+  
+  ##Initialize the output data.frame
+  outputDF<-data.frame()
+  
+  ##Use string operations to glue the count data with the percentage and '%'
+  overall<-paste(inputDF[,1]," (",round(inputDF[,1]/totalN*100,1),"%)", sep="")
+  male<-paste(inputDF[,2]," (",round(inputDF[,2]/totalMale*100,1),"%)", sep="")
+  female<-paste(inputDF[,3]," (",round(inputDF[,3]/totalFemale*100,1),"%)", sep = "")
+  
+  #Build the data.frame from the individual columns created above
+  outputDF<-cbind(overall, male, female)
+  
+  #Name the rows in the data.frame
+  rownames(outputDF)<-rownames(inputDF)
+  
+  #Return the data.frame
+  outputDF
+}
+naAttachStars<-function(inputDF, starDF){
+  
+  ##InputDF is the percentage DF, starDF is the converted ChiSq p.values into asterisks
+  ## p.values are in pairs of columns starting at col 2
+  
+  ##String operations to glue the previously obtained count (num%) with
+  ## the significance level stars
+  ## changing this slightly, only want the stars on the second item, not both
+  overall<-paste(inputDF[,1], sep="")
+  #male<-paste(inputDF[,2],starDF[,2], sep="")
+  male<-paste(inputDF[,2], sep="")
+  female<-paste(inputDF[,3],starDF[,2], sep="")
+  
+  ##Build the data.frame by column binding the vectors created above
+  outputDF<-cbind(overall, male, female)
+  
+  ##Set the row names
+  rownames(outputDF)<-rownames(inputDF)
+  
+  ##Return the data.frame
+  outputDF
+}
+naChiSq<-function(inputDF, rows){
+  
+  ##Input the original data.frame and the list of columns.
+  ## This then performs the chisq.test between the sub-categories age, gender, etc.
+  
+  ##Initialize the storage vectors
+  gender<-c()
+
+  ##For each name in rows...
+  for(i in rows){
+    ##Calculate the p.value for various chisq.tests
+    ## ensure that the first parameter is entered as a binary term
+    ## For example: inputDF$na_3_Age < 45 will return TRUE or FALSE
+    
+    gender<-c(gender,round(chisq.test(table(inputDF$na_2_Gender,as.data.frame(inputDF[,i])[,1]))$p.value,3))
+      }
+  
+  ##Build the data.frame by binding each of the vectors created above as a column
+  output<-cbind(age,gender,insured,attend)
+  
+  ##Set the row names
+  rownames(output)<-rows
+  
+  ##Return the data.frame
+  output
+  
+}
+naGetStars<-function(inputDF){
+  
+  ##Input the p.values obtained from naChiSq to get a data.frame of
+  ## asterisks correspdonding to the level of significance.
+  ## 0.05  = *
+  ## 0.01  = **
+  ## 0.001 = ***
+  
+  numCols<-ncol(inputDF)
+  
+  ifelse(inputDF[,1:numCols]<=0.05,ifelse(inputDF[,1:numCols]<=0.01,ifelse(inputDF[,1:numCols]<=0.001,'***','**'),'*'),'')
+}
+Getmeansd<- function(rows,refDF){
+  ## Example: contin.  variables 
+  ## rows<- c("Age", "Member_Length", "relig_sum")
+  
+  cols<-c("Overall","Sex","Sex")
+  
+  ##Initialize the data.frame to receive data
+  newDF1<-data.frame()
+  
+  ##For each heading listed in the rows vector...
+  for(i in rows){
+    
+    for(j in 1:length(cols)){
+      
+      if (j==1){
+        output<- c(paste(round(mean(refDF[i][[1]], na.rm = TRUE),1), " (", round(sd(refDF[i][[1]],na.rm = TRUE) ,1), ")", sep = ""))
+      }
+      else if (j==2){
+        output<- c(output,paste(round(mean(refDF[i][[1]][which(refDF[cols[j]]==1)], na.rm = TRUE),1), " (", round(sd(refDF[i][[1]][which(refDF[cols[j]]==1)],na.rm = TRUE) ,1), ")", sep = ""))
+      }
+      else if (j==3){
+        output<- c(output,paste(round(mean(refDF[i][[1]][which(refDF[cols[j]]==2)], na.rm = TRUE),1), " (", round(sd(refDF[i][[1]][which(refDF[cols[j]]==2)],na.rm = TRUE) ,1), ")", sep = ""))
+      }
+      
+    }
+    ##One row has been completed, save the information to a data.frame
+    newDF1<- rbind(newDF1, output, stringsAsFactors= FALSE)
+  }
+  ##Set the column and row names of the data.frame
+  colnames(newDF1)<-cols
+  rownames(newDF1)<-rows
+  
+  ##Return the data.frame from this function
+  newDF1
+}
+myttest <-function(x, y){
+  round(t.test(x~y, conf.level = 0.95)$p.value, 3)
+}
+nattest<-function(inputDF, rows){
+
+  ##Input the original data.frame and the list of columns.
+  ## This then performs the chisq.test between the sub-categories age, gender, etc.
+
+  ##Initialize the storage vectors
+  #age<-c()
+  gender<-c()
+
+  ##For each name in rows...
+  for(i in rows){
+    ##Calculate the p.value for various t.tests
+    ## ensure that the first parameter is entered as a binary term
+    ## For example: inputDF$na_3_Age < 45 will return TRUE or FALSE
+    #age<-c(age,round(chisq.test(table(inputDF$current_age < 45,as.data.frame(inputDF[,i])[,1]))$p.value,3))
+    gender<-c(gender,p.round2(t.test(inputDF$gender_birth,as.data.frame(inputDF[,i])[,1])$p.value))
+  }
+
+  ##Build the data.frame by binding each of the vectors created above as a column
+  output<-cbind(gender)
+
+  ##Set the row names
+  rownames(output)<-rows
+
+  ##Return the data.frame
+  output
+
+}
+theme_flex_apa <- function(myft){
+  
+   myft <- bold(myft, part = "header")
+   myft <- italic(myft, part = "header")
+   myft <- italic(myft, part = "footer")
+   myft <- fontsize(myft, part = "body", size = 8)
+   myft <- fontsize(myft, part = "header", size = 9)
+   myft <- fontsize(myft, part = "footer", size = 7)
+   myft <- align(myft, align = "left",  part = "all")
+   myft <- align(myft, align = "center", part = "header")
+   myft <- padding(myft, padding = 0, part = "all")
+   myft <- font(myft, fontname = "Times New Roman", part = "all")
+   myft <- border_remove(myft)
+  
+   out_b <- fp_border(color = "black", style = "solid", width = 1)
+   myft <- hline_bottom(myft, border = out_b)
+   myft <- hline_top(myft, border = out_b, part = "header")
+   myft <- hline_top(myft, border = out_b)
+   
+  # theme_vanilla <- function(x){
+
+  # x <- hline( x, border = std_b, part = "all")
+  # x <- hline_top( x, border = std_b, part = "header" )
+  # x <- style( x = x, pr_p = fp_par(text.align = "right", padding = 2), part = "all")
+  # x <- bg(x = x, bg = "transparent", part = "all")
+  # x <- bold(x = x, bold = TRUE, part = "header")
+  # x
+#}
+  
+   return(myft)
+}
+```
+```{r analysis_preferences}
+# Seed for random number generation
+set.seed(42)
+```
+
+```{r Table_1_create, echo=FALSE, include=FALSE}
+
+decisioncut <- ggplot2::cut_interval(data2$decision, n = 3, labels= FALSE, ordered_result=FALSE)
+decisioncut <- factor(decisioncut, ordered=FALSE)
+data2$decisioncut <- decisioncut
+  
+##Table 1
+TabNBlistSI <- list(data2$Sexual_orient)
+TabNBlistMS <- list(data2$Marital_status)
+TabNBlistEd <- list(data2$Education)
+TabNBlistIn <- list(data2$Insurance)
+TabNBlistMI <- list(data2$Income)
+TabNBlistDn <- list(data2$Denomination)
+TabNBlistMC <- list(data2$Member)
+TabNBlistAE <- list(data2$Annual_exam)
+#TabNBlistC4 <- list(data2$Condom_use_6) 
+
+TabNBrowsSI <- c("Sexual_orient") 
+TabNBrowsMS <- c("Marital_status") 
+TabNBrowsEd <- c("Education")
+TabNBrowsIn <- c("Insurance")
+TabNBrowsMI <- c("Income") 
+TabNBrowsDn <- c("Denomination")
+TabNBrowsMC <- c("Member")
+TabNBrowsAE <- c("Annual_exam")
+#TabNBrowsC4 <- c("Condom_use_6")
+Newrow <- ""
+
+TabSDrows <- c("Age", "thinks", "Length_member", "RBBoverall", "HIVknowledge", "support", "risk", "Stigma_sumscore", "decision")
+TabBrows <- c("Tested_past6mos", "Tested_12months", "Vaginal_sex_6", "Oral_sex_6", "Anal_sex_6")
+
+TabBa <- getData(TabBrows, data2, 1)
+TabBb <- dataPercent(TabBa, data2)
+rownames(TabBb) <- c("Previous 6 months", "Previous 12 months", "Vaginal Sex", "Oral Sex", "Anal Sex")
+
+TabNBSIa <- GetNBdata(TabNBlistSI, TabNBrowsSI, data2)
+TabNBMSa <- GetNBdata(TabNBlistMS, TabNBrowsMS, data2) 
+TabNBEda <- GetNBdata(TabNBlistEd, TabNBrowsEd, data2)
+TabNBMIa <- GetNBdata(TabNBlistMI, TabNBrowsMI, data2) 
+TabNBIna <- GetNBdata(TabNBlistIn, TabNBrowsIn, data2) 
+TabNBDna <- GetNBdata(TabNBlistDn, TabNBrowsDn, data2) 
+TabNBMCa <- GetNBdata(TabNBlistMC, TabNBrowsMC, data2)
+#TabNBC4a <- GetNBdata(TabNBlistC4, TabNBrowsC4, data2)
+TabNBAEa <- GetNBdata(TabNBlistAE, TabNBrowsAE, data2)
+
+TabmeanSD <- Getmeansd(TabSDrows, data2)
+rownames(TabmeanSD) <- c("Age (SD)", "Testing Beliefs (SD)", "Length of Church Membership (SD)", "Religiosity (SD)", "HIV knowledge (SD)", "Support for testing (SD)", "Risk behavior (SD)", "Stigma (SD)", "Decision Implusivity")
+
+TabNBSIb <- dataNBPercent(TabNBSIa, data2)
+TabNBMSb <- dataNBPercent(TabNBMSa, data2)
+#rownames(TabNBMSb) <- c("Single", "Not married, but living with partner", "Married", "Separated", "Divorced", "Widowed")
+
+TabNBEdb <- dataNBPercent(TabNBEda, data2)
+#rownames(TabNBEdb) <- c("8th Grade or below", "9th to 11th grade", "High School Graduate or GED", "Post High School or Technical Training", "Some college but no degree", "Associate's Degree or Technical School Certificate", "College Degree", "Graduate Courses", "Graduate Degree")
+TabNBMIb <- dataNBPercent(TabNBMIa, data2)
+#rownames(TabNBMIb) <- c("$0 - $1,000", "$1,001 - $2,000", "$2,001 - $2,500", "$2,501 - $3,000", "More than $3,000", "Don't Know")
+
+
+TabNBMIb <- dataNBPercent(TabNBMIa, data2)
+TabNBInb <- dataNBPercent(TabNBIna, data2)
+TabNBDnb <- dataNBPercent(TabNBDna, data2)
+TabNBMCb <- dataNBPercent(TabNBMCa, data2)
+TabNBAEb <- dataNBPercent(TabNBAEa, data2)
+
+Gender <- mod.freq(data2$Sex)
+Gender2 <- paste(sum(plyr::count(data2$Sex)[,2]), " ", "(100%)")
+Gender3 <- data.frame(Gender2, Gender[1,], Gender[2,])
+rownames(Gender3) <- c("odd", "Gender")
+colnames(Gender3) <- colnames(TabNBAEb)
+colnames(TabmeanSD) <- colnames(TabNBAEb)
+Gender3[2,]
+
+TabCombv <- rbind(Gender3[2,], Newrow, TabNBSIb, Newrow, TabNBMSb, Newrow, TabNBEdb, Newrow, TabNBMIb, TabmeanSD, Newrow, TabBb[1:2,], Newrow, TabBb[3:5,])
+
+
+TabCombv1 <- cbind(rownames(TabCombv), TabCombv)
+TabCombv1 <- apply(TabCombv1, 2, as.character)
+TabCombv1[2,] <- ""
+TabCombv1[2,1] <- "Sexual Orientation"
+TabCombv1[8,] <- ""
+TabCombv1[8,1] <- "Marital Status"
+TabCombv1[15,] <- ""
+TabCombv1[15,1] <- "Education"
+TabCombv1[24,] <- ""
+TabCombv1[24,1] <- "Monthly Income"
+TabCombv1[40,] <- ""
+TabCombv1[40,1] <- "Recieved an HIV test"
+TabCombv1[43,] <- ""
+TabCombv1[43,1] <- "Sexual behavior in the previous 6 months"
+
+TabCombv1 <- data.frame(TabCombv1)
+colnames(TabCombv1) <- c("V1", "overall", "male", "female")
+
+```
+
+```{r Table1Lat, echo=FALSE, fig.align='c', include=TRUE, results='asis'}
+# TabCompdf <- TabCombv1
+# TabComphx1 <- as_hux(TabCompdf)
+# colnames(TabComphx1) <- c("Variables", "Overall", "Men", "Women")
+# #caption(TabComphx1) <- 'Table 1. Participant Demographics'
+# TabComphx1 <- add_colnames(TabComphx1)
+# #TabComphx1 <- add_footnote(TabComphx1, "a Responses are not mutually exclusive", border = 0.8)
+# TabComphx1 <- insert_row(TabComphx1, "", "N (%)", "n (%)", "n (%)", after = 1, copy_cell_props = TRUE)
+# TabComphx1 <- insert_row(TabComphx1, "", "", "Gender", "", after = 0, copy_cell_props = TRUE)
+# colspan(TabComphx1)[1,3] <- 2
+# #align(TabComphx1)[1,3] <- 'center'
+# #wrap(TabComphx1) <- TRUE
+# #bottom_border(TabComphx1)[3,] <- 1
+# #top_border(TabComphx1)[1,] <- 1
+# print(xtable(TabComphx1, caption = "Participant Demographics"), floating = FALSE, latex.environment = getOption("xtable.latex.environments", c("center")), type ="latex", tabular.environment="longtable",  include.rownames = FALSE, comment= FALSE, timestamp= NULL, include.colnames = FALSE, caption.placement = 'top', hline.after = c(-1,3,49))
+
+```
+
+```{r Table_1_Flex, echo=FALSE, include=TRUE, results='asis'}
+
+# TabCombv2 <- xtable_to_flextable(xtable(TabComphx1, caption = "Participant Demographics"), text.properties = officer::fp_text(), rowname_col = "", include.rownames = FALSE, rowname_col = TRUE, hline.after = c(-1,3,47))
+# 
+# TabComphx2 <- as_flextable(TabComphx1)
+# TabComphx3 <- add_header(TabComphx2, V1 = "Table 1. Participant Demographics")
+# TabComphx4 <- merge_at(TabComphx3, i = 1, j = 1:3, part = "header")
+# knitr::knit_print(merge_at(add_header(as_flextable(TabComphx1), V1 ="Table 1. Participant Demographics")))
+# knitr::knit_print(autofit(as_flextable(TabComphx1)))
+```
+```{r demos1, echo = FALSE, include= FALSE}
+
+ftFITJAMtab1 <- regulartable(TabCombv1, col_keys = c("V1", "overall", "male", "female"))
+ftFITJAMtab1 <- set_header_labels(ftFITJAMtab1, V1 = "Characteristics", overall = "Overall No. (%)", male = "Men", female = "Women")
+ftFITJAMtab1 <- add_header(ftFITJAMtab1, V1 = "", overall = "", male = "Gender No. (%)", female = "Gender No. (%)", top = TRUE)
+#testingft3 <- add_footer(testingft3, V1 = "aResponses are not mutually exclusive, bF/V: Fruits and Vegetables, *p<.05; **p<.01, ***p<.001")
+ftFITJAMtab1 <- merge_h(ftFITJAMtab1, part = "header")
+ftFITJAMtab1 <- merge_v(ftFITJAMtab1, part = "header")
+#testingft3 <- merge_at(testingft3, i = 1, j = 1:4, part = "footer")
+ftFITJAMtab1 <- add_header(ftFITJAMtab1, V1 = "Table. Demographics")
+ftFITJAMtab1 <- merge_at(ftFITJAMtab1, i = 1, j = 1:4, part = "header")
+```
+```{r demo2, echo = FALSE, include=TRUE}
+Tab1 <- theme_flex_apa(ftFITJAMtab1)
+Tab1 <- autofit(Tab1)
+Tab1
+
+```
